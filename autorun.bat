@@ -1,9 +1,12 @@
 @echo off
-title "Endesnaht"
+title Endesnaht
 echo [Endesnaht] Auto-run is starting ..
-:main
-cd client
-npm run dev
-timeout /t 30
-echo [Endesnaht] Crashed! Restarting ..
-goto main
+
+REM Start cloudflared tunnel in a new window
+start "Cloudflared Tunnel" cloudflared tunnel run endesnaht
+
+REM Start the Node.js server in a new window
+start "Node Server" cmd /k "cd server && node server.js"
+
+REM Start npm dev server in a new window
+start "Vite Dev Server" cmd /k "cd client && npm run dev"

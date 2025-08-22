@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import cors from 'cors';
 import sharp from 'sharp';
+import robot from 'robotjs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,13 +14,14 @@ const app = express();
 const port = 3001;
 
 app.use(cors());
+app.use(express.json());
 
 const latestScreenshotPath = path.join(__dirname, 'latest_screenshot.jpg');
 
 setInterval(async () => {
 	try {
 		// Take screenshot as a buffer (JPEG for speed)
-		console.time('Updated frame.');
+		//console.time('Updated frame.');
 		const imgBuffer = await screenshot({ format: 'jpg' });
 		
 		// Resize and compress to JPEG, then save
@@ -37,11 +39,35 @@ setInterval(async () => {
 			})
 			.toFile(latestScreenshotPath);
 		
-		console.timeEnd('Updated frame.');
+		//console.timeEnd('Updated frame.');
 	} catch (err) {
 		console.error('Screenshot error:', err);
 	}
 }, 50);
+
+app.post('/api/click', (req, res) => {
+	const { x, y } = req.body;
+	if (
+		typeof x !== 'number' ||
+		typeof y !== 'number' ||
+		x < 0 || x > 1 ||
+		y < 0 || y > 1
+	) {
+		return res.status(400).send('Invalid coordinates');
+	}
+	
+	// Get screen size
+	const screenSize = robot.getScreenSize();
+	const absX = Math.round(x * screenSize.width);
+	const absY = Math.round(y * screenSize.height);
+	
+	console.log(`Clicked on:`, absX, absY);
+	// Move mouse and click
+	robot.moveMouse(absX, absY);
+	robot.mouseClick();
+	
+	res.sendStatus(200);
+});
 
 app.get('/api/screenshot', (req, res) => {
 	res.set({

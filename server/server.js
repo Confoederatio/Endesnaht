@@ -1,66 +1,63 @@
-import express from "express";
-import dotenv from "dotenv";
-import fetch from "node-fetch";
-import screenshot from "screenshot-desktop";
-import path from "path";
-import fs from "fs";
-import cors from "cors";
-import { fileURLToPath } from "url";
+import express from 'express';
+import screenshot from 'screenshot-desktop';
+import path from 'path';
+import fs from 'fs';
+import cors from 'cors';
+import sharp from 'sharp';
+import { fileURLToPath } from 'url';
 
-// For __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-dotenv.config({ path: "../.env" });
 
 const app = express();
 const port = 3001;
 
 app.use(cors());
-app.use(express.json());
 
-const latestScreenshotPath = path.join(__dirname, "latest_screenshot.png");
+const latestScreenshotPath = path.join(__dirname, 'latest_screenshot.jpg');
 
-// Take a screenshot every 5 seconds and save as PNG
 setInterval(async () => {
 	try {
-		await screenshot({ filename: latestScreenshotPath, format: "png" });
+		// Take screenshot as a buffer (JPEG for speed)
+		console.time('Updated frame.');
+		const imgBuffer = await screenshot({ format: 'jpg' });
+		
+		// Resize and compress to JPEG, then save
+		await sharp(imgBuffer)
+			.resize({
+				width: 1920,
+				height: 1080,
+				fit: 'inside',
+				withoutEnlargement: true,
+			})
+			.jpeg({
+				quality: 70,
+				progressive: true,
+				chromaSubsampling: '4:4:4',
+			})
+			.toFile(latestScreenshotPath);
+		
+		console.timeEnd('Updated frame.');
 	} catch (err) {
-		console.error("Screenshot error:", err);
+		console.error('Screenshot error:', err);
 	}
-}, 5000);
+}, 50);
 
-// Endpoint to serve the latest screenshot
-app.get(['/api/screenshot', '/api/screenshot.png'], (req, res) => {
-	fs.access(latestScreenshotPath, fs.constants.F_OK, (err) => {
-		if (err) {
-			res.status(404).send("Screenshot not available");
-			return;
-		}
-		res.set("Content-Type", "image/png");
-		fs.createReadStream(latestScreenshotPath).pipe(res);
-	});
-});
-
-// Your existing Discord token endpoint
-app.post("/api/token", async (req, res) => {
-	const response = await fetch(`https://discord.com/api/oauth2/token`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/x-www-form-urlencoded",
-		},
-		body: new URLSearchParams({
-			client_id: process.env.VITE_DISCORD_CLIENT_ID,
-			client_secret: process.env.DISCORD_CLIENT_SECRET,
-			grant_type: "authorization_code",
-			code: req.body.code,
-		}),
+app.get('/api/screenshot', (req, res) => {
+	res.set({
+		'Cache-Control': 'no-cache, no-store, must-revalidate',
+		Pragma: 'no-cache',
+		Expires: '0',
+		'Content-Type': 'image/jpeg',
 	});
 	
-	const { access_token } = await response.json();
-	res.send({ access_token });
+	if (fs.existsSync(latestScreenshotPath)) {
+		res.sendFile(latestScreenshotPath);
+	} else {
+		res.status(404).send('Screenshot not available yet.');
+	}
 });
 
 app.listen(port, () => {
-	console.log(`Server listening at http://localhost:${port}`);
+	console.log(`✅ Server listening at http://localhost:${port}`);
 });

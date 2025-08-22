@@ -1,8 +1,9 @@
 @echo off
-title Snow Zed
-echo [Snow Zed] Auto-run is starting ..
+title "Endesnaht"
+echo [Endesnaht] Auto-run is starting ..
 :main
-node --max-old-space-size=12192 main.js
+cd client
+npm run dev
 timeout /t 30
-echo [Snow Zed] Crashed! Restarting ..
+echo [Endesnaht] Crashed! Restarting ..
 goto main

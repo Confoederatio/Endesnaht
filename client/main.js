@@ -9,7 +9,6 @@ async function setupApp() {
 		patchUrlMappings([{ prefix: '/api', target: 'endesnaht.net' }]);
 	}
 	
-	// Your HTML rendering code here...
 	document.querySelector('#app').innerHTML = `
         <div id="main-container" style="
             position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -17,37 +16,41 @@ async function setupApp() {
             background: #222;
         ">
             <div id="screenshot-container" style="
-                position: relative; overflow: hidden; touch-action: none;
-                flex: 1 1 0; /* Let this container grow and shrink */
-                min-height: 0; /* Prevents overflow in flex containers */
+                position: relative; /* Needed for absolute positioning of child */
+                overflow: hidden; touch-action: none;
+                flex: 1 1 0;
+                min-height: 0;
                 border-bottom: 1px solid #ccc;
-                display: flex; align-items: center; justify-content: center;
+                /* REMOVED: display: flex; align-items: center; justify-content: center; */
             ">
                 <div id="screenshot-transformer" style="
-                    /* This is the stable aspect-ratio box. It will never collapse. */
                     aspect-ratio: 1920 / 1080;
                     max-width: 100%;
                     max-height: 100%;
                     touch-action: none;
                     will-change: transform;
+                    /* ADDED for JS control */
+                    position: absolute;
+                    top: 0;
+                    left: 0;
                 ">
                     <img id="screenshot" alt="Server Screenshot" style="
                         width: 100%; height: 100%;
-                        display: block; /* Removes extra space below image */
+                        display: block;
                         user-select: none;
                         background: black;
                     " draggable="false" />
                 </div>
             </div>
             <div id="keyboard" style="
-                flex: 0 0 auto; /* Don't grow, size based on content */
+                flex: 0 0 auto;
                 display: flex; flex-direction: column;
                 justify-content: flex-start; align-items: stretch;
                 padding: 0.5em; box-sizing: border-box; overflow-y: auto;
                 background: #333;
-                max-height: 45vh; /* Max height to keep keys square-ish and viewable */
+                max-height: 45vh;
             ">
-                <!-- Keyboard HTML is now cleaner, relying on style.css -->
+                <!-- Keyboard HTML... -->
                 <div class="kb-row">
                     <button data-key="Esc">Esc</button> <button data-key="F1">F1</button> <button data-key="F2">F2</button> <button data-key="F3">F3</button> <button data-key="F4">F4</button> <button data-key="F5">F5</button> <button data-key="F6">F6</button> <button data-key="F7">F7</button> <button data-key="F8">F8</button> <button data-key="F9">F9</button> <button data-key="F10">F10</button> <button data-key="F11">F11</button> <button data-key="F12">F12</button>
                 </div>
@@ -66,11 +69,11 @@ async function setupApp() {
                 <div class="kb-row">
                     <button data-key="Ctrl" class="special-key">Ctrl</button> <button data-key="Win" class="special-key">Win</button> <button data-key="Alt" class="special-key">Alt</button> <button data-key="Space" class="space-btn" style="flex-grow: 6;">Space</button> <button data-key="Alt" class="special-key">Alt</button> <button data-key="Win" class="special-key">Win</button> <button data-key="Menu" class="special-key">Menu</button> <button data-key="Ctrl" class="special-key">Ctrl</button>
                 </div>
-            <button id="hold-toggle" style="
-                margin: 0.5em auto 0.5em auto; display: block; padding: 0.5em 1em;
-                font-size: 1.1em; border-radius: 6px; border: 1px solid #888;
-                background: #ddd; cursor: pointer; color: black
-            ">Hold: OFF</button>
+                <button id="hold-toggle" style="
+                    margin: 0.5em auto 0.5em auto; display: block; padding: 0.5em 1em;
+                    font-size: 1.1em; border-radius: 6px; border: 1px solid #888;
+                    background: #ddd; cursor: pointer; color: black
+                ">Hold: OFF</button>
             </div>
         </div>
     `;
@@ -85,28 +88,59 @@ async function setupApp() {
 	let scale = 1;
 	let panX = 0;
 	let panY = 0;
-	let startX = 0;
-	let startY = 0;
+	let isPinching = false;
+	let lastTap = 0;
+	
+	// Gesture-specific state
 	let startDist = 0;
 	let lastScale = 1;
-	let isPinching = false;
-	let lastTouchEnd = 0;
+	let pinchOriginX = 0;
+	let pinchOriginY = 0;
 	
 	function setTransform() {
-		screenshotTransformer.style.transform = `scale(${scale}) translate(${
-			panX / scale
-		}px, ${panY / scale}px)`;
+		// We position the element from its top-left corner.
+		// So we must set the transform-origin explicitly to 0 0.
+		screenshotTransformer.style.transformOrigin = '0 0';
+		screenshotTransformer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
 	}
+	
+	// NEW: Function to center the content initially and on resize
+	function centerContent() {
+		const containerRect = screenshotContainer.getBoundingClientRect();
+		const transformerRect = screenshotTransformer.getBoundingClientRect();
+		
+		// The rect of the transformer will be scaled, so we need its unscaled dimensions
+		const unscaledWidth = transformerRect.width / scale;
+		const unscaledHeight = transformerRect.height / scale;
+		
+		panX = (containerRect.width - unscaledWidth) / 2;
+		panY = (containerRect.height - unscaledHeight) / 2;
+		
+		setTransform();
+	}
+	
+	// Initialize the position
+	centerContent();
+	// Optional but recommended: re-center if the window is resized
+	window.addEventListener('resize', centerContent);
+	
 	
 	screenshotContainer.addEventListener('touchstart', (e) => {
 		if (e.touches.length === 2) {
 			isPinching = true;
+			lastScale = scale;
+			
 			const dx = e.touches[0].clientX - e.touches[1].clientX;
 			const dy = e.touches[0].clientY - e.touches[1].clientY;
 			startDist = Math.hypot(dx, dy);
-			lastScale = scale;
-			startX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - panX;
-			startY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - panY;
+			
+			// Get finger midpoint relative to the viewport
+			const pinchClientX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+			const pinchClientY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+			
+			// Calculate the point on the UN-SCALED image under the fingers
+			pinchOriginX = (pinchClientX - panX) / lastScale;
+			pinchOriginY = (pinchClientY - panY) / lastScale;
 		}
 	});
 	
@@ -117,12 +151,17 @@ async function setupApp() {
 				const dx = e.touches[0].clientX - e.touches[1].clientX;
 				const dy = e.touches[0].clientY - e.touches[1].clientY;
 				const dist = Math.hypot(dx, dy);
-				scale = Math.max(1, Math.min(lastScale * (dist / startDist), 5));
 				
-				const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-				const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-				panX = centerX - startX;
-				panY = centerY - startY;
+				// Calculate scale and clamp it
+				scale = Math.max(1, Math.min(lastScale * (dist / startDist), 10));
+				
+				// Get the NEW finger midpoint
+				const pinchClientX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+				const pinchClientY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+				
+				// Calculate the new pan to keep the pinchOrigin under the new finger midpoint.
+				panX = pinchClientX - pinchOriginX * scale;
+				panY = pinchClientY - pinchOriginY * scale;
 				
 				setTransform();
 				e.preventDefault();
@@ -131,8 +170,6 @@ async function setupApp() {
 		{ passive: false }
 	);
 	
-	let lastTap = 0;
-	
 	screenshotContainer.addEventListener('touchend', (e) => {
 		if (e.touches.length < 2) {
 			isPinching = false;
@@ -140,15 +177,15 @@ async function setupApp() {
 		if (e.touches.length === 0) {
 			const now = Date.now();
 			if (now - lastTap < 300) {
-				// Double-tap detected
+				// Double-tap to reset
 				scale = 1;
-				panX = 0;
-				panY = 0;
-				setTransform();
+				centerContent(); // Use our centering function to reset
 			}
 			lastTap = now;
 		}
 	});
+	
+	// --- REST OF THE CODE IS UNCHANGED ---
 	
 	screenshotImage.addEventListener('dragstart', (e) => e.preventDefault());
 	
@@ -176,8 +213,6 @@ async function setupApp() {
 				screenshotImage.src = url;
 				screenshotImage.onload = () => {
 					URL.revokeObjectURL(url);
-					// NO MORE JAVASCRIPT STABILIZATION NEEDED!
-					// The CSS 'aspect-ratio' property handles everything.
 				};
 			}
 		} catch (err) {
@@ -189,6 +224,7 @@ async function setupApp() {
 	updateScreenshot();
 	
 	// --- Keyboard Logic ---
+	// ... (The entire keyboard logic remains exactly the same) ...
 	let modifiers = { Shift: false, Ctrl: false, Alt: false, Win: false };
 	let capsLock = false;
 	
@@ -231,6 +267,10 @@ async function setupApp() {
 			command: modifiers.Win,
 		};
 		
+		const holdMode = document.getElementById('hold-toggle').classList.contains('active');
+		let heldKey = document.getElementById('hold-toggle').dataset.heldKey;
+		let heldModifiers = JSON.parse(document.getElementById('hold-toggle').dataset.heldModifiers || 'null');
+		
 		if (holdMode) {
 			if (heldKey) {
 				await fetch('/api/hold', {
@@ -252,8 +292,8 @@ async function setupApp() {
 					hold: true,
 				}),
 			});
-			heldKey = key;
-			heldModifiers = currentModifiers;
+			document.getElementById('hold-toggle').dataset.heldKey = key;
+			document.getElementById('hold-toggle').dataset.heldModifiers = JSON.stringify(currentModifiers);
 			return;
 		}
 		
@@ -278,15 +318,13 @@ async function setupApp() {
 		});
 	});
 	
-	let holdMode = false;
-	let heldKey = null;
-	let heldModifiers = null;
-	
 	const holdToggleBtn = document.getElementById('hold-toggle');
 	holdToggleBtn.addEventListener('click', async () => {
-		holdMode = !holdMode;
+		const holdMode = holdToggleBtn.classList.toggle('active');
 		holdToggleBtn.textContent = `Hold: ${holdMode ? 'ON' : 'OFF'}`;
-		holdToggleBtn.classList.toggle('active', holdMode);
+		
+		let heldKey = holdToggleBtn.dataset.heldKey;
+		let heldModifiers = JSON.parse(holdToggleBtn.dataset.heldModifiers || 'null');
 		
 		if (!holdMode && heldKey) {
 			await fetch('/api/hold', {
@@ -298,8 +336,8 @@ async function setupApp() {
 					hold: false,
 				}),
 			});
-			heldKey = null;
-			heldModifiers = null;
+			delete holdToggleBtn.dataset.heldKey;
+			delete holdToggleBtn.dataset.heldModifiers;
 		}
 	});
 }

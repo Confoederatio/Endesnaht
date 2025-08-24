@@ -90,26 +90,25 @@ async function setupApp() {
 	let panY = 0;
 	let isPinching = false;
 	let lastTap = 0;
-	
-	// Gesture-specific state
+
+// Gesture-specific state
 	let startDist = 0;
 	let lastScale = 1;
 	let pinchOriginX = 0;
 	let pinchOriginY = 0;
 	
 	function setTransform() {
-		// We position the element from its top-left corner.
-		// So we must set the transform-origin explicitly to 0 0.
 		screenshotTransformer.style.transformOrigin = '0 0';
 		screenshotTransformer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
 	}
 	
-	// NEW: Function to center the content initially and on resize
 	function centerContent() {
 		const containerRect = screenshotContainer.getBoundingClientRect();
 		const transformerRect = screenshotTransformer.getBoundingClientRect();
 		
-		// The rect of the transformer will be scaled, so we need its unscaled dimensions
+		// Make sure the image has loaded
+		if (!transformerRect.width || !transformerRect.height) return;
+		
 		const unscaledWidth = transformerRect.width / scale;
 		const unscaledHeight = transformerRect.height / scale;
 		
@@ -118,10 +117,13 @@ async function setupApp() {
 		
 		setTransform();
 	}
-	
-	// Initialize the position
-	centerContent();
-	// Optional but recommended: re-center if the window is resized
+
+// Wait until the image has real dimensions
+	screenshotImage.addEventListener('load', () => {
+		centerContent();
+	});
+
+// Also re-center on resize
 	window.addEventListener('resize', centerContent);
 	
 	
